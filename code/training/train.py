@@ -29,6 +29,7 @@ from azureml.core.run import Run
 import os
 from sklearn.datasets import load_diabetes
 from sklearn.linear_model import Ridge
+from sklearn.svm import SVR
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.externals import joblib
@@ -36,6 +37,8 @@ import numpy as np
 import json
 import subprocess
 from typing import Tuple, List
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestRegressor
 
 # run_history_name = 'devops-ai'
 # os.makedirs('./outputs', exist_ok=True)
@@ -52,23 +55,44 @@ data = {"train": {"X": X_train, "y": y_train}, "test": {"X": X_test, "y": y_test
 
 print("Running train.py")
 
-# Randomly pic alpha
-alphas = np.arange(0.0, 1.0, 0.05)
-alpha = alphas[np.random.choice(alphas.shape[0], 1, replace=False)][0]
-print(alpha)
-run.log("alpha", alpha)
-reg = Ridge(alpha=alpha)
-reg.fit(data["train"]["X"], data["train"]["y"])
-preds = reg.predict(data["test"]["X"])
-run.log("mse", mean_squared_error(preds, data["test"]["y"]))
 
+def GridSearch(reg,parameters,train_X,train_y,test_X,test_y):
+    model = GridSearchCV(reg, parameters)
+    model.fit(train_X,train_y)
+    mse = mean_squared_error(model.predict(test_X),test_y)
+    return model, mse
+
+#Ridge Regression 
+reg_ridge = Ridge()
+parameters_ridge = {'alpha':np.arange(0.01, 1.0, 0.05)}
+model_ridge,mse_ridge = GridSearch(reg_ridge, parameters_ridge, data["train"]["X"], data["train"]["y"],data["test"]["X"], data["test"]["y"])
+
+#Support Vector Regression
+reg_svr = SVR()
+parameters_svr = {'kernel':['linear','poly','rbf']}
+model_SVR,mse_SVR = GridSearch(reg_svr, parameters_svr,data["train"]["X"], data["train"]["y"],data["test"]["X"], data["test"]["y"])
+
+ 
+#Random Forest Regression
+reg_rfr = RandomForestRegressor()
+parameters_rfr = {'max_depth': [10, 20, 30, 50],
+ 'min_samples_leaf': [1, 2, 4],
+ 'min_samples_split': [2, 5, 10]}
+model_rfr,mse_rfr = GridSearch(reg_rfr, parameters_rfr,data["train"]["X"], data["train"]["y"],data["test"]["X"], data["test"]["y"])
+
+#Check which model is better and save the best model
+models = [model_ridge,model_SVR,model_rfr]
+best_mse = np.argmin([mse_ridge,mse_SVR,mse_rfr])
+best_model = models[best_mse]
+
+run.log("mse", best_mse)
 
 # Save model as part of the run history
 model_name = "sklearn_regression_model.pkl"
 # model_name = "."
 
 with open(model_name, "wb") as file:
-    joblib.dump(value=reg, filename=model_name)
+    joblib.dump(value=best_model, filename=model_name)
 
 # upload the model file explicitly into artifacts
 run.upload_file(name="./outputs/" + model_name, path_or_stream=model_name)
