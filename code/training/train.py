@@ -82,8 +82,9 @@ model_rfr,mse_rfr = GridSearch(reg_rfr, parameters_rfr,data["train"]["X"], data[
 
 #Check which model is better and save the best model
 models = [model_ridge,model_SVR,model_rfr]
-best_mse = np.argmin([mse_ridge,mse_SVR,mse_rfr])
-best_model = models[best_mse]
+mse = [mse_ridge,mse_SVR,mse_rfr]
+best_mse = min(mse)
+best_model = models[np.argmin(mse)]
 
 run.log("mse", best_mse)
 
